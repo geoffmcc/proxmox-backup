@@ -230,6 +230,6 @@ if [ "$DRY_RUN" = true ]; then
     log "Dry-run dashboard will remain available for 30 seconds..."
     sleep 30
 else
-    log "Dashboard will remain available for 60 seconds..."
-    sleep 60
+    log "Dashboard will remain available for 5 minutes..."
+    sleep 300
 fi
