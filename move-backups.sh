@@ -2,6 +2,19 @@
 
 set -euo pipefail
 
+SESSION_NAME="backup-transfer"
+if [ -z "${TMUX:-}" ]; then
+    if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+        echo "Session '$SESSION_NAME' already exists. Attaching..."
+        tmux attach -t "$SESSION_NAME"
+        exit 0
+    fi
+    echo "Starting tmux session '$SESSION_NAME'..."
+    tmux new-session -d -s "$SESSION_NAME" "$0 $*"
+    tmux attach -t "$SESSION_NAME"
+    exit 0
+fi
+
 SRC_DIR="/var/lib/vz/dump"
 DST_DIR="/mnt/WD-Gold/proxmox-backups"
 LOG_FILE="/var/log/backup-transfer-$(date +%Y%m%d-%H%M%S).log"
