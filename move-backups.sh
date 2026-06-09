@@ -10,7 +10,7 @@ for arg in "$@"; do
 done
 
 SESSION_NAME="backup-transfer"
-if [ -z "${TMUX:-}" ]; then
+if [ "$DRY_RUN" = false ] && [ -z "${TMUX:-}" ]; then
     if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
         echo "Session '$SESSION_NAME' already exists. Attaching..."
         tmux attach -t "$SESSION_NAME"
