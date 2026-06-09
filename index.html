@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backup Transfer Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 2rem;
+            min-height: 100vh;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 2rem;
+            color: #00d4ff;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        .progress-section {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .progress-bar-container {
+            background: #0f3460;
+            border-radius: 8px;
+            height: 32px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+        .progress-bar {
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+            height: 100%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: #1a1a2e;
+            min-width: 40px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .stat-card {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 1.2rem;
+            text-align: center;
+        }
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 0.3rem;
+        }
+        .stat-card .label {
+            color: #888;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+        .stat-transferred .value { color: #00ff88; }
+        .stat-skipped .value { color: #ffaa00; }
+        .stat-failed .value { color: #ff4444; }
+        .stat-current .value { color: #00d4ff; font-size: 1.2rem; }
+        .current-file {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 1.2rem;
+            margin-bottom: 1.5rem;
+            word-break: break-all;
+        }
+        .current-file .label { color: #888; font-size: 0.85rem; margin-bottom: 0.3rem; }
+        .current-file .name { color: #00d4ff; font-size: 1.1rem; }
+        .elapsed {
+            text-align: center;
+            color: #888;
+            margin-bottom: 1.5rem;
+        }
+        .files-list {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 1.2rem;
+        }
+        .files-list h3 { margin-bottom: 1rem; color: #888; }
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.6rem 0;
+            border-bottom: 1px solid #0f3460;
+        }
+        .file-item:last-child { border-bottom: none; }
+        .file-name { flex: 1; word-break: break-all; }
+        .file-status {
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .status-transferred { background: #00ff8833; color: #00ff88; }
+        .status-skipped { background: #ffaa0033; color: #ffaa00; }
+        .status-failed { background: #ff444433; color: #ff4444; }
+        .complete-banner {
+            background: linear-gradient(90deg, #00ff88, #00d4ff);
+            color: #1a1a2e;
+            text-align: center;
+            padding: 1rem;
+            border-radius: 12px;
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 1.5rem;
+            display: none;
+        }
+        .loading {
+            text-align: center;
+            color: #888;
+            padding: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Backup Transfer Dashboard</h1>
+        <div class="complete-banner" id="completeBanner">Transfer Complete!</div>
+        <div class="progress-section">
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progressBar" style="width: 0%">0%</div>
+            </div>
+            <div style="text-align: center; color: #888;" id="progressText">Waiting for data...</div>
+        </div>
+        <div class="stats">
+            <div class="stat-card stat-transferred">
+                <div class="value" id="transferred">0</div>
+                <div class="label">Transferred</div>
+            </div>
+            <div class="stat-card stat-skipped">
+                <div class="value" id="skipped">0</div>
+                <div class="label">Skipped</div>
+            </div>
+            <div class="stat-card stat-failed">
+                <div class="value" id="failed">0</div>
+                <div class="label">Failed</div>
+            </div>
+            <div class="stat-card stat-current">
+                <div class="value" id="currentProgress">0 / 0</div>
+                <div class="label">Progress</div>
+            </div>
+        </div>
+        <div class="current-file" id="currentFileSection" style="display: none;">
+            <div class="label">Currently Processing</div>
+            <div class="name" id="currentFileName">-</div>
+        </div>
+        <div class="elapsed" id="elapsed">Elapsed: --:--:--</div>
+        <div class="files-list" id="filesList">
+            <h3>Completed Files</h3>
+            <div id="filesContainer">
+                <div class="loading">No files processed yet...</div>
+            </div>
+        </div>
+    </div>
+    <script>
+        let startTime = null;
+        function updateDashboard() {
+            fetch('status.json?t=' + Date.now())
+                .then(r => r.json())
+                .then(data => {
+                    if (data.running && !startTime) startTime = Date.now() - (data.elapsed_seconds * 1000);
+                    const total = data.total_files || 0;
+                    const processed = data.transferred + data.skipped + data.failed;
+                    const pct = total > 0 ? Math.round((processed / total) * 100) : 0;
+                    document.getElementById('progressBar').style.width = pct + '%';
+                    document.getElementById('progressBar').textContent = pct + '%';
+                    document.getElementById('progressText').textContent = `File ${processed} of ${total}`;
+                    document.getElementById('transferred').textContent = data.transferred || 0;
+                    document.getElementById('skipped').textContent = data.skipped || 0;
+                    document.getElementById('failed').textContent = data.failed || 0;
+                    document.getElementById('currentProgress').textContent = `${processed} / ${total}`;
+                    if (data.current_file) {
+                        document.getElementById('currentFileSection').style.display = 'block';
+                        document.getElementById('currentFileName').textContent = data.current_file;
+                    } else {
+                        document.getElementById('currentFileSection').style.display = 'none';
+                    }
+                    const elapsed = data.elapsed_seconds || 0;
+                    const h = Math.floor(elapsed / 3600);
+                    const m = Math.floor((elapsed % 3600) / 60);
+                    const s = elapsed % 60;
+                    document.getElementById('elapsed').textContent = `Elapsed: ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+                    const container = document.getElementById('filesContainer');
+                    if (data.files && data.files.length > 0) {
+                        container.innerHTML = data.files.map(f => `
+                            <div class="file-item">
+                                <span class="file-name">${f.name}</span>
+                                <span class="file-status status-${f.status}">${f.status}</span>
+                            </div>
+                        `).join('');
+                    }
+                    if (!data.running) {
+                        document.getElementById('completeBanner').style.display = 'block';
+                        document.getElementById('currentFileSection').style.display = 'none';
+                    }
+                })
+                .catch(e => console.log('Waiting for status...'));
+        }
+        updateDashboard();
+        setInterval(updateDashboard, 2000);
+    </script>
+</body>
+</html>
