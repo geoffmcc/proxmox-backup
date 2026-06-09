@@ -18,6 +18,8 @@ This project provides a robust backup transfer solution that:
 - **Live Dashboard**: Real-time web interface showing progress, statistics, and file-by-file status
 - **Date-Based Organization**: Extracts dates from filenames and creates subdirectories (e.g., `proxmox-backups/2026-06-09/`)
 - **SHA-256 Verification**: Verifies checksums before and after transfer, only deletes source files after successful verification
+- **Checksum Storage**: Creates `.sha256` files alongside each backup and generates session manifests
+- **Verify Mode**: Run `--verify` to check all stored backups against their checksums
 - **Sidecar File Handling**: Moves associated `.log` and `.notes` files alongside backups
 - **Dry-Run Mode**: Safe testing with fake files in temporary directories
 - **Smart Skipping**: Skips files that already exist at destination with matching checksums
@@ -67,6 +69,35 @@ Creates 10 fake backup files in `/tmp/backup-test-src/` and runs the full transf
 - Testing sidecar file handling
 
 Auto-cleans temporary directories if all checksums pass. Dashboard available for 30 seconds after completion.
+
+### Verify Mode
+
+```bash
+~/move-backups/move-backups.sh --verify
+```
+
+Verifies all backup files in the SMB share against their stored SHA-256 checksums. This mode:
+- Scans the destination directory for all `.sha256` files
+- Runs `sha256sum -c` on each to verify integrity
+- Reports: X passed, Y failed, Z missing
+- Exits with code 1 if any failures detected
+
+Useful for periodic integrity checks of your backup archive.
+
+### Checksum Storage
+
+The script creates two types of checksum records:
+
+**Per-file checksums (`.sha256` files):**
+- Created alongside each backup file (e.g., `backup.tar.zst.sha256`)
+- Format: `<hash>  <filename>` (standard sha256sum format)
+- Can be verified individually: `sha256sum -c backup.tar.zst.sha256`
+
+**Session manifest files:**
+- Created after each transfer run in the destination root
+- Format: `checksums-YYYYMMDD-HHMMSS.txt`
+- Contains all hashes from that transfer session
+- Provides complete audit trail
 
 ### Dashboard Access
 
@@ -152,10 +183,12 @@ Logs include timestamps, file processing status, checksums, and any errors.
    - Checks if destination exists with matching checksum (skip if identical)
    - Copies file to date-based subdirectory
    - Verifies destination checksum matches source
+   - Creates `.sha256` checksum file alongside destination backup
    - Moves sidecar files (`.log`, `.notes`)
    - Deletes source file only after verification
    - Updates dashboard status.json
-5. **Cleanup**: Stops HTTP server after 5 minutes (30 seconds for dry-run), removes temp dirs in dry-run mode
+5. **Manifest Generation**: Creates `checksums-YYYYMMDD-HHMMSS.txt` with all transfer hashes
+6. **Cleanup**: Stops HTTP server after 5 minutes (30 seconds for dry-run), removes temp dirs in dry-run mode
 
 ## Troubleshooting
 

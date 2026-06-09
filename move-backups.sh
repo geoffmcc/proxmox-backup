@@ -3,14 +3,18 @@
 set -euo pipefail
 
 DRY_RUN=false
+VERIFY=false
 for arg in "$@"; do
     if [ "$arg" = "--dry-run" ]; then
         DRY_RUN=true
     fi
+    if [ "$arg" = "--verify" ]; then
+        VERIFY=true
+    fi
 done
 
 SESSION_NAME="backup-transfer"
-if [ "$DRY_RUN" = false ] && [ -z "${TMUX:-}" ]; then
+if [ "$DRY_RUN" = false ] && [ "$VERIFY" = false ] && [ -z "${TMUX:-}" ]; then
     if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
         echo "Session '$SESSION_NAME' already exists. Attaching..."
         tmux attach -t "$SESSION_NAME"
@@ -19,6 +23,38 @@ if [ "$DRY_RUN" = false ] && [ -z "${TMUX:-}" ]; then
     echo "Starting tmux session '$SESSION_NAME'..."
     tmux new-session -d -s "$SESSION_NAME" "$0 $*"
     tmux attach -t "$SESSION_NAME"
+    exit 0
+fi
+
+if [ "$VERIFY" = true ]; then
+    DST_DIR="/mnt/<SMB_SHARE>/proxmox-backups"
+    echo "Verifying checksums in $DST_DIR..."
+    echo ""
+    
+    passed=0
+    failed=0
+    missing=0
+    
+    while IFS= read -r -d '' sha_file; do
+        sha_dir=$(dirname "$sha_file")
+        cd "$sha_dir"
+        if sha256sum -c "$(basename "$sha_file")" &>/dev/null; then
+            backup_file=$(awk '{print $2}' "$sha_file")
+            echo "$backup_file: OK"
+            passed=$((passed + 1))
+        else
+            backup_file=$(awk '{print $2}' "$sha_file")
+            echo "$backup_file: FAILED"
+            failed=$((failed + 1))
+        fi
+    done < <(find "$DST_DIR" -name "*.sha256" -print0)
+    
+    echo ""
+    echo "Summary: $passed passed, $failed failed, $missing missing"
+    
+    if [ "$failed" -gt 0 ]; then
+        exit 1
+    fi
     exit 0
 fi
 
@@ -177,6 +213,10 @@ for ext in tar.zst vma.zst; do
             dst_hash=$(sha256sum "$dst_file" | awk '{print $1}')
             if [ "$src_hash" = "$dst_hash" ]; then
                 log "  SKIPPED: Already exists with matching checksum"
+                if [ ! -f "${dst_file}.sha256" ]; then
+                    echo "$dst_hash  $filename" > "${dst_file}.sha256"
+                    log "  Created missing .sha256 file"
+                fi
                 skipped=$((skipped + 1))
                 files_json="${files_json:+$files_json,}{\"name\":\"$filename\",\"status\":\"skipped\"}"
                 write_status "true" "$total_files" "" "$files_json"
@@ -191,7 +231,9 @@ for ext in tar.zst vma.zst; do
             log "  Verifying transfer..."
             dst_hash=$(sha256sum "$dst_file" | awk '{print $1}')
             if [ "$src_hash" = "$dst_hash" ]; then
-                log "  Checksum verified. Removing source file."
+                log "  Checksum verified. Creating .sha256 file."
+                echo "$dst_hash  $filename" > "${dst_file}.sha256"
+                log "  Removing source file."
                 rm "$src_file"
 
                 for sidecar in "${src_file%.${ext}}"*".log" "${src_file%.${ext}}"*".notes"; do
@@ -222,6 +264,24 @@ for ext in tar.zst vma.zst; do
         fi
     done
 done
+
+MANIFEST_FILE="$DST_DIR/checksums-$(date +%Y%m%d-%H%M%S).txt"
+log "Generating manifest: $MANIFEST_FILE"
+{
+    echo "# Backup Transfer Manifest - $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "# Source: $SRC_DIR"
+    echo "# Destination: $DST_DIR"
+    echo ""
+    while IFS= read -r -d '' sha_file; do
+        backup_file=$(basename "${sha_file%.sha256}")
+        stored_hash=$(awk '{print $1}' "$sha_file")
+        echo "# $backup_file"
+        echo "hash: $stored_hash"
+        echo "checksum_file: $(realpath "$sha_file")"
+        echo ""
+    done < <(find "$DST_DIR" -name "*.sha256" -print0 | sort -z)
+} > "$MANIFEST_FILE"
+log "Manifest created with $(grep -c '^#' "$MANIFEST_FILE") entries"
 
 write_status "false" "$total_files" "" "$files_json"
 log "Done. Transferred: $transferred, Skipped: $skipped, Failed: $failed"

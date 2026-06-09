@@ -28,7 +28,9 @@ This is a backup transfer system for Proxmox VE that moves backup files from the
 4. **Dashboard Availability**: 5 minutes after completion in normal mode, 30 seconds in dry-run mode
 5. **File Organization**: Backups are organized into date-based subdirectories (e.g., `2026-06-09/`)
 6. **Checksum Verification**: SHA-256 is used to verify transfers before deleting source files
-7. **Sidecar Files**: `.log` and `.notes` files are moved alongside their corresponding backup files
+7. **Checksum Storage**: `.sha256` files are created alongside each backup; session manifests are generated after each run
+8. **Verify Mode**: `--verify` flag checks all stored backups against their checksums
+9. **Sidecar Files**: `.log` and `.notes` files are moved alongside their corresponding backup files
 
 ## Testing
 
@@ -53,16 +55,32 @@ Use `--dry-run` flag to test the script safely:
 - Spanning 3 dates: 2026-06-07, 2026-06-08, 2026-06-09
 - Mix of `.log` and `.notes` sidecar files
 
+### Verify Mode
+
+Use `--verify` flag to check all stored backups against their checksums:
+
+```bash
+~/move-backups/move-backups.sh --verify
+```
+
+**What it does:**
+- Scans destination directory for all `.sha256` files
+- Runs `sha256sum -c` on each to verify integrity
+- Reports: X passed, Y failed, Z missing
+- Exits with code 1 if any failures detected
+
+Useful for periodic integrity checks of the backup archive.
+
 ## Git Notes
 
-- **Repository Type**: Local only, no GitHub remote configured
+- **Remote**: `origin` → `https://github.com/geoffmcc/proxmox-backup.git`
 - **Line Endings**: LF enforced via `.gitattributes`
 - **Commit Style**: Descriptive messages explaining what changed
-- **No Push**: Changes are committed locally but not pushed to any remote
+- **Push**: Use stored GitHub token (see global AGENTS.md) to push via API
 
 ## File Responsibilities
 
-- **move-backups.sh**: Main script with all logic (tmux, transfer, dashboard, dry-run)
+- **move-backups.sh**: Main script with all logic (tmux, transfer, dashboard, dry-run, verify, checksum storage)
 - **index.html**: Dashboard UI, copied to web directory at runtime
 - **Caddyfile**: Complete Caddy configuration including the backup dashboard route
 - **.gitattributes**: Enforces LF line endings for all files
