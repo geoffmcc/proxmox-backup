@@ -60,7 +60,7 @@ EOF
 
 mkdir -p "$DST_DIR"
 mkdir -p "$WEB_DIR"
-cp /root/index.html "$WEB_DIR/index.html" 2>/dev/null || true
+cp ~/move-backups/index.html "$WEB_DIR/index.html" 2>/dev/null || true
 
 cd "$WEB_DIR"
 python3 -m http.server "$WEB_PORT" &>/dev/null &
