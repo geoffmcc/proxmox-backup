@@ -106,21 +106,6 @@ Verifies all backup files in the SMB share against their stored SHA-256 checksum
 
 Useful for periodic integrity checks of your backup archive.
 
-### Integrity Test
-
-```bash
-~/move-backups/test-transfer.sh
-```
-
-Runs a full integration test that:
-1. Creates 3 test files (500MB, 1GB, 200MB) in a temporary directory
-2. Transfers them to a test destination using custom paths
-3. Verifies all checksums pass
-4. Corrupts the 200MB file in the destination
-5. Runs verification again to confirm corruption is detected
-
-This test demonstrates the checksum verification system working correctly. Test files are stored in `/tmp/backup-integrity-test/` and can be inspected or deleted after the test.
-
 ### Checksum Storage
 
 The script creates two types of checksum records:

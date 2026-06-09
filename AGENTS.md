@@ -81,23 +81,6 @@ Use `--verify` flag to check all stored backups against their checksums:
 
 Useful for periodic integrity checks of the backup archive.
 
-### Integrity Test
-
-Run the integration test to verify the checksum system works correctly:
-
-```bash
-~/move-backups/test-transfer.sh
-```
-
-**What it does:**
-- Creates 3 test files (500MB, 1GB, 200MB) in `/tmp/backup-integrity-test/source/`
-- Transfers them to `/tmp/backup-integrity-test/destination/` using custom paths
-- Verifies all checksums pass
-- Corrupts the 200MB file in the destination
-- Runs verification again to confirm corruption is detected
-
-This test demonstrates the checksum verification system working correctly. Test files are stored in `/tmp/backup-integrity-test/` and can be inspected or deleted after the test.
-
 ## Git Notes
 
 - **Remote**: `origin` → `https://github.com/geoffmcc/proxmox-backup.git`
@@ -108,7 +91,6 @@ This test demonstrates the checksum verification system working correctly. Test 
 ## File Responsibilities
 
 - **move-backups.sh**: Main script with all logic (tmux, transfer, dashboard, dry-run, verify, checksum storage)
-- **test-transfer.sh**: Integration test that creates test files, transfers them, corrupts one, and verifies detection
 - **index.html**: Dashboard UI, copied to web directory at runtime
 - **Caddyfile**: Complete Caddy configuration including the backup dashboard route
 - **.env.example**: Template for all configurable environment variables
