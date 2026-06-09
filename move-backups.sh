@@ -13,8 +13,29 @@ for arg in "$@"; do
     fi
 done
 
+NO_TMUX="${NO_TMUX:-false}"
+
+SCRIPT_DIR="${SCRIPT_DIR:-$HOME/move-backups}"
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    source "$SCRIPT_DIR/.env"
+fi
+
+SMB_SHARE="${SMB_SHARE:-}"
+SRC_DIR="${SRC_DIR:-/var/lib/vz/dump}"
+BACKUP_SUBDIR="${BACKUP_SUBDIR:-proxmox-backups}"
+WEB_PORT="${WEB_PORT:-8080}"
+WEB_DIR="${WEB_DIR:-/var/www/backup-status}"
+LOG_DIR="${LOG_DIR:-/var/log}"
+DASHBOARD_TIMEOUT="${DASHBOARD_TIMEOUT:-60}"
+DRY_RUN_TIMEOUT="${DRY_RUN_TIMEOUT:-30}"
+
+if [ "$DRY_RUN" = false ] && [ "$VERIFY" = false ] && [ -z "$SMB_SHARE" ] && [ -z "${DST_DIR:-}" ]; then
+    echo "ERROR: SMB_SHARE is not set. Create $SCRIPT_DIR/.env with SMB_SHARE=<your-share-name>"
+    exit 1
+fi
+
 SESSION_NAME="backup-transfer"
-if [ "$DRY_RUN" = false ] && [ "$VERIFY" = false ] && [ -z "${TMUX:-}" ]; then
+if [ "$DRY_RUN" = false ] && [ "$VERIFY" = false ] && [ "$NO_TMUX" = false ] && [ -z "${TMUX:-}" ]; then
     if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
         echo "Session '$SESSION_NAME' already exists. Attaching..."
         tmux attach -t "$SESSION_NAME"
@@ -27,7 +48,7 @@ if [ "$DRY_RUN" = false ] && [ "$VERIFY" = false ] && [ -z "${TMUX:-}" ]; then
 fi
 
 if [ "$VERIFY" = true ]; then
-    DST_DIR="/mnt/<SMB_SHARE>/proxmox-backups"
+    DST_DIR="${DST_DIR:-/mnt/${SMB_SHARE}/${BACKUP_SUBDIR}}"
     echo "Verifying checksums in $DST_DIR..."
     echo ""
     
@@ -95,11 +116,9 @@ if [ "$DRY_RUN" = true ]; then
     create_fake_file "vzdump-lxc-100-2026_06_09-05_00_00.tar.zst" false false
     echo "Created $(ls -1 "$SRC_DIR"/*.tar.zst "$SRC_DIR"/*.vma.zst 2>/dev/null | wc -l) backup files"
 else
-    SRC_DIR="/var/lib/vz/dump"
-    DST_DIR="/mnt/<SMB_SHARE>/proxmox-backups"
-    LOG_FILE="/var/log/backup-transfer-$(date +%Y%m%d-%H%M%S).log"
-    WEB_DIR="/var/www/backup-status"
-    WEB_PORT=8080
+    SRC_DIR="${SRC_DIR:-/var/lib/vz/dump}"
+    DST_DIR="${DST_DIR:-/mnt/${SMB_SHARE}/${BACKUP_SUBDIR}}"
+    LOG_FILE="${LOG_DIR}/backup-transfer-$(date +%Y%m%d-%H%M%S).log"
 fi
 
 STATUS_FILE="$WEB_DIR/status.json"
@@ -157,9 +176,9 @@ mkdir -p "$DST_DIR"
 mkdir -p "$WEB_DIR"
 
 if [ "$DRY_RUN" = true ]; then
-    cp ~/move-backups/index.html "$WEB_DIR/index.html" 2>/dev/null || true
+    cp "$SCRIPT_DIR/index.html" "$WEB_DIR/index.html" 2>/dev/null || true
 else
-    cp ~/move-backups/index.html "$WEB_DIR/index.html" 2>/dev/null || true
+    cp "$SCRIPT_DIR/index.html" "$WEB_DIR/index.html" 2>/dev/null || true
 fi
 
 cd "$WEB_DIR"
@@ -287,9 +306,9 @@ write_status "false" "$total_files" "" "$files_json"
 log "Done. Transferred: $transferred, Skipped: $skipped, Failed: $failed"
 
 if [ "$DRY_RUN" = true ]; then
-    log "Dry-run dashboard will remain available for 30 seconds..."
-    sleep 30
+    log "Dry-run dashboard will remain available for $DRY_RUN_TIMEOUT seconds..."
+    sleep "$DRY_RUN_TIMEOUT"
 else
-    log "Dashboard will remain available for 60 seconds..."
-    sleep 60
+    log "Dashboard will remain available for $DASHBOARD_TIMEOUT seconds..."
+    sleep "$DASHBOARD_TIMEOUT"
 fi

@@ -6,26 +6,36 @@ This is a backup transfer system for Proxmox VE that moves backup files from the
 
 ## Key Paths
 
-- **Source Directory**: `/var/lib/vz/dump` (Proxmox default backup location)
-- **Destination Directory**: `/mnt/<SMB_SHARE>/proxmox-backups` (SMB share mount point)
-- **Web Dashboard Directory**: `/var/www/backup-status` (served by Python HTTP server)
-- **Script Location on Proxmox**: `~/move-backups/` (where files are deployed)
-- **Logs**: `/var/log/backup-transfer-YYYYMMDD-HHMMSS.log`
+All paths are configurable via `.env` file. Defaults shown:
+
+- **Source Directory**: `$SRC_DIR` (default: `/var/lib/vz/dump`)
+- **Destination Directory**: `/mnt/$SMB_SHARE/$BACKUP_SUBDIR` (SMB share mount point)
+- **Web Dashboard Directory**: `$WEB_DIR` (default: `/var/www/backup-status`)
+- **Script Location on Proxmox**: `$SCRIPT_DIR` (default: `~/move-backups/`)
+- **Logs**: `$LOG_DIR/backup-transfer-YYYYMMDD-HHMMSS.log` (default: `/var/log/`)
+
+## Configuration
+
+The script reads `$SCRIPT_DIR/.env` for configuration. See `.env.example` for all variables.
+
+**Required:** `SMB_SHARE` (script exits with error if not set and not in dry-run/verify mode)
+
+**Optional with defaults:** `SRC_DIR`, `BACKUP_SUBDIR`, `WEB_PORT`, `WEB_DIR`, `LOG_DIR`, `SCRIPT_DIR`, `DASHBOARD_TIMEOUT`, `DRY_RUN_TIMEOUT`
 
 ## Infrastructure
 
 - **Proxmox Server**: <PROXMOX_IP> (where the script runs)
 - **Caddy Server**: <CADDY_IP> (reverse proxy)
 - **Dashboard URL**: `https://backups.<YOUR_DOMAIN>` (via Caddy)
-- **Direct Dashboard URL**: `http://<PROXMOX_IP>:8080`
+- **Direct Dashboard URL**: `http://<PROXMOX_IP>:$WEB_PORT`
 - **tmux Session Name**: `backup-transfer`
 
 ## Important Notes
 
 1. **Script Execution**: The script runs on the Proxmox server (<PROXMOX_IP>), not on the Caddy server
 2. **tmux Behavior**: Normal mode uses tmux for SSH resilience; dry-run mode skips tmux
-3. **Dashboard Server**: Python HTTP server on port 8080, started by the script, killed by cleanup trap
-4. **Dashboard Availability**: 5 minutes after completion in normal mode, 30 seconds in dry-run mode
+3. **Dashboard Server**: Python HTTP server on `$WEB_PORT`, started by the script, killed by cleanup trap
+4. **Dashboard Availability**: `$DASHBOARD_TIMEOUT` seconds after completion in normal mode, `$DRY_RUN_TIMEOUT` seconds in dry-run mode
 5. **File Organization**: Backups are organized into date-based subdirectories (e.g., `2026-06-09/`)
 6. **Checksum Verification**: SHA-256 is used to verify transfers before deleting source files
 7. **Checksum Storage**: `.sha256` files are created alongside each backup; session manifests are generated after each run
@@ -71,6 +81,23 @@ Use `--verify` flag to check all stored backups against their checksums:
 
 Useful for periodic integrity checks of the backup archive.
 
+### Integrity Test
+
+Run the integration test to verify the checksum system works correctly:
+
+```bash
+~/move-backups/test-transfer.sh
+```
+
+**What it does:**
+- Creates 3 test files (500MB, 1GB, 200MB) in `/tmp/backup-integrity-test/source/`
+- Transfers them to `/tmp/backup-integrity-test/destination/` using custom paths
+- Verifies all checksums pass
+- Corrupts the 200MB file in the destination
+- Runs verification again to confirm corruption is detected
+
+This test demonstrates the checksum verification system working correctly. Test files are stored in `/tmp/backup-integrity-test/` and can be inspected or deleted after the test.
+
 ## Git Notes
 
 - **Remote**: `origin` → `https://github.com/geoffmcc/proxmox-backup.git`
@@ -81,9 +108,12 @@ Useful for periodic integrity checks of the backup archive.
 ## File Responsibilities
 
 - **move-backups.sh**: Main script with all logic (tmux, transfer, dashboard, dry-run, verify, checksum storage)
+- **test-transfer.sh**: Integration test that creates test files, transfers them, corrupts one, and verifies detection
 - **index.html**: Dashboard UI, copied to web directory at runtime
 - **Caddyfile**: Complete Caddy configuration including the backup dashboard route
+- **.env.example**: Template for all configurable environment variables
 - **.gitattributes**: Enforces LF line endings for all files
+- **.gitignore**: Excludes `.env` and `*.log` from version control
 
 ## Common Tasks
 

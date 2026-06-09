@@ -5,7 +5,7 @@ Automated backup transfer script for Proxmox VE that moves backup files from the
 ## Overview
 
 This project provides a robust backup transfer solution that:
-- Moves Proxmox backup files (`.tar.zst` for containers, `.vma.zst` for VMs) from `/var/lib/vz/dump` to `/mnt/<SMB_SHARE>/proxmox-backups`
+- Moves Proxmox backup files (`.tar.zst` for containers, `.vma.zst` for VMs) from the source directory to an SMB share
 - Organizes backups into date-based subdirectories (e.g., `2026-06-09/`)
 - Provides a live web dashboard showing transfer progress
 - Uses tmux for SSH resilience
@@ -31,6 +31,28 @@ This project provides a robust backup transfer solution that:
 - tmux (for session management)
 - Caddy (optional, for reverse proxy access)
 
+## Configuration
+
+Copy `.env.example` to `.env` in the script directory and configure:
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+**Required:**
+- `SMB_SHARE` — name of the SMB share (mounted at `/mnt/<SMB_SHARE>`)
+
+**Optional (defaults shown):**
+- `SRC_DIR` — `/var/lib/vz/dump` — Proxmox backup source directory
+- `BACKUP_SUBDIR` — `proxmox-backups` — subdirectory under SMB mount
+- `WEB_PORT` — `8080` — dashboard HTTP server port
+- `WEB_DIR` — `/var/www/backup-status` — dashboard files location
+- `LOG_DIR` — `/var/log` — log file directory
+- `SCRIPT_DIR` — `~/move-backups` — where script and index.html are deployed
+- `DASHBOARD_TIMEOUT` — `60` — seconds to keep dashboard up after completion
+- `DRY_RUN_TIMEOUT` — `30` — seconds for dry-run dashboard availability
+
 ## Deployment
 
 Deploy the script and dashboard to your Proxmox server:
@@ -51,7 +73,7 @@ ssh root@<PROXMOX_IP> "chmod +x ~/move-backups/move-backups.sh"
 The script will:
 1. Create a tmux session named `backup-transfer`
 2. Start a web dashboard on port 8080
-3. Transfer all `.tar.zst` and `.vma.zst` files from `/var/lib/vz/dump` to `/mnt/<SMB_SHARE>/proxmox-backups`
+3. Transfer all `.tar.zst` and `.vma.zst` files from the source directory to the SMB share destination
 4. Organize files into date-based subdirectories
 5. Verify checksums and delete source files only after successful verification
 6. Keep the dashboard available for 5 minutes after completion
@@ -83,6 +105,21 @@ Verifies all backup files in the SMB share against their stored SHA-256 checksum
 - Exits with code 1 if any failures detected
 
 Useful for periodic integrity checks of your backup archive.
+
+### Integrity Test
+
+```bash
+~/move-backups/test-transfer.sh
+```
+
+Runs a full integration test that:
+1. Creates 3 test files (500MB, 1GB, 200MB) in a temporary directory
+2. Transfers them to a test destination using custom paths
+3. Verifies all checksums pass
+4. Corrupts the 200MB file in the destination
+5. Runs verification again to confirm corruption is detected
+
+This test demonstrates the checksum verification system working correctly. Test files are stored in `/tmp/backup-integrity-test/` and can be inspected or deleted after the test.
 
 ### Checksum Storage
 
@@ -152,7 +189,7 @@ sudo systemctl reload caddy
 ```
 proxmox-backup/
 ├── move-backups.sh    # Main transfer script with tmux, dashboard, and dry-run support
-├── index.html         # Dashboard UI (copied to /var/www/backup-status/ at runtime)
+├── index.html         # Dashboard UI (copied to WEB_DIR at runtime)
 ├── Caddyfile          # Complete Caddy config with backup dashboard route
 └── .gitattributes     # Enforces LF line endings
 ```
@@ -163,7 +200,7 @@ Transfer logs are written to:
 
 **Normal mode:**
 ```
-/var/log/backup-transfer-YYYYMMDD-HHMMSS.log
+$LOG_DIR/backup-transfer-YYYYMMDD-HHMMSS.log
 ```
 
 **Dry-run mode:**
@@ -195,7 +232,7 @@ Logs include timestamps, file processing status, checksums, and any errors.
 **Dashboard not accessible:**
 - Check if script is running: `ps aux | grep move-backups`
 - Check if port 8080 is listening: `netstat -tlnp | grep 8080`
-- Check logs in `/var/log/backup-transfer-*.log`
+- Check logs in `$LOG_DIR/backup-transfer-*.log`
 
 **tmux session issues:**
 - List sessions: `tmux ls`
