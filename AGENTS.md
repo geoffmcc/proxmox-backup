@@ -7,22 +7,22 @@ This is a backup transfer system for Proxmox VE that moves backup files from the
 ## Key Paths
 
 - **Source Directory**: `/var/lib/vz/dump` (Proxmox default backup location)
-- **Destination Directory**: `/mnt/WD-Gold/proxmox-backups` (SMB share mount point)
+- **Destination Directory**: `/mnt/<SMB_SHARE>/proxmox-backups` (SMB share mount point)
 - **Web Dashboard Directory**: `/var/www/backup-status` (served by Python HTTP server)
 - **Script Location on Proxmox**: `~/move-backups/` (where files are deployed)
 - **Logs**: `/var/log/backup-transfer-YYYYMMDD-HHMMSS.log`
 
 ## Infrastructure
 
-- **Proxmox Server**: 192.168.1.4 (where the script runs)
-- **Caddy Server**: 192.168.1.11 (reverse proxy)
-- **Dashboard URL**: `https://backups.home.digitaltrainwreck.com` (via Caddy)
-- **Direct Dashboard URL**: `http://192.168.1.4:8080`
+- **Proxmox Server**: <PROXMOX_IP> (where the script runs)
+- **Caddy Server**: <CADDY_IP> (reverse proxy)
+- **Dashboard URL**: `https://backups.<YOUR_DOMAIN>` (via Caddy)
+- **Direct Dashboard URL**: `http://<PROXMOX_IP>:8080`
 - **tmux Session Name**: `backup-transfer`
 
 ## Important Notes
 
-1. **Script Execution**: The script runs on the Proxmox server (192.168.1.4), not on the Caddy server
+1. **Script Execution**: The script runs on the Proxmox server (<PROXMOX_IP>), not on the Caddy server
 2. **tmux Behavior**: Normal mode uses tmux for SSH resilience; dry-run mode skips tmux
 3. **Dashboard Server**: Python HTTP server on port 8080, started by the script, killed by cleanup trap
 4. **Dashboard Availability**: 5 minutes after completion in normal mode, 30 seconds in dry-run mode
@@ -72,8 +72,8 @@ Use `--dry-run` flag to test the script safely:
 ### Deploying Updates
 
 ```bash
-scp move-backups.sh index.html root@192.168.1.4:~/move-backups/
-ssh root@192.168.1.4 "chmod +x ~/move-backups/move-backups.sh"
+scp move-backups.sh index.html root@<PROXMOX_IP>:~/move-backups/
+ssh root@<PROXMOX_IP> "chmod +x ~/move-backups/move-backups.sh"
 ```
 
 ### Checking Script Status
@@ -109,8 +109,8 @@ pkill -f "python3 -m http.server 8080"
 The Caddyfile includes this route for the dashboard:
 
 ```caddyfile
-backups.home.digitaltrainwreck.com {
-    reverse_proxy http://192.168.1.4:8080
+backups.<YOUR_DOMAIN> {
+    reverse_proxy http://<PROXMOX_IP>:8080
 }
 ```
 
@@ -124,7 +124,7 @@ Add to Dashy `conf.yml` under Infrastructure section:
 - title: Backup Transfer
   description: Proxmox Backup Dashboard
   icon: fas fa-archive
-  url: https://backups.home.digitaltrainwreck.com
+  url: https://backups.<YOUR_DOMAIN>
   target: newwindow
   statusCheckAllowInsecure: true
   id: 3_1505_backuptransfer

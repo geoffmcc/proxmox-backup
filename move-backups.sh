@@ -60,7 +60,7 @@ if [ "$DRY_RUN" = true ]; then
     echo "Created $(ls -1 "$SRC_DIR"/*.tar.zst "$SRC_DIR"/*.vma.zst 2>/dev/null | wc -l) backup files"
 else
     SRC_DIR="/var/lib/vz/dump"
-    DST_DIR="/mnt/WD-Gold/proxmox-backups"
+    DST_DIR="/mnt/<SMB_SHARE>/proxmox-backups"
     LOG_FILE="/var/log/backup-transfer-$(date +%Y%m%d-%H%M%S).log"
     WEB_DIR="/var/www/backup-status"
     WEB_PORT=8080

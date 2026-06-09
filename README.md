@@ -5,7 +5,7 @@ Automated backup transfer script for Proxmox VE that moves backup files from the
 ## Overview
 
 This project provides a robust backup transfer solution that:
-- Moves Proxmox backup files (`.tar.zst` for containers, `.vma.zst` for VMs) from `/var/lib/vz/dump` to `/mnt/WD-Gold/proxmox-backups`
+- Moves Proxmox backup files (`.tar.zst` for containers, `.vma.zst` for VMs) from `/var/lib/vz/dump` to `/mnt/<SMB_SHARE>/proxmox-backups`
 - Organizes backups into date-based subdirectories (e.g., `2026-06-09/`)
 - Provides a live web dashboard showing transfer progress
 - Uses tmux for SSH resilience
@@ -34,8 +34,8 @@ This project provides a robust backup transfer solution that:
 Deploy the script and dashboard to your Proxmox server:
 
 ```bash
-scp move-backups.sh index.html root@192.168.1.4:~/move-backups/
-ssh root@192.168.1.4 "chmod +x ~/move-backups/move-backups.sh"
+scp move-backups.sh index.html root@<PROXMOX_IP>:~/move-backups/
+ssh root@<PROXMOX_IP> "chmod +x ~/move-backups/move-backups.sh"
 ```
 
 ## Usage
@@ -49,7 +49,7 @@ ssh root@192.168.1.4 "chmod +x ~/move-backups/move-backups.sh"
 The script will:
 1. Create a tmux session named `backup-transfer`
 2. Start a web dashboard on port 8080
-3. Transfer all `.tar.zst` and `.vma.zst` files from `/var/lib/vz/dump` to `/mnt/WD-Gold/proxmox-backups`
+3. Transfer all `.tar.zst` and `.vma.zst` files from `/var/lib/vz/dump` to `/mnt/<SMB_SHARE>/proxmox-backups`
 4. Organize files into date-based subdirectories
 5. Verify checksums and delete source files only after successful verification
 6. Keep the dashboard available for 5 minutes after completion
@@ -72,12 +72,12 @@ Auto-cleans temporary directories if all checksums pass. Dashboard available for
 
 **Direct access:**
 ```
-http://192.168.1.4:8080
+http://<PROXMOX_IP>:8080
 ```
 
 **Via Caddy reverse proxy:**
 ```
-https://backups.home.digitaltrainwreck.com
+https://backups.<YOUR_DOMAIN>
 ```
 
 The dashboard shows:
@@ -105,8 +105,8 @@ The tmux session persists until the script completes and the cleanup trap fires.
 Add this route to your Caddyfile (typically on your reverse proxy server):
 
 ```caddyfile
-backups.home.digitaltrainwreck.com {
-    reverse_proxy http://192.168.1.4:8080
+backups.<YOUR_DOMAIN> {
+    reverse_proxy http://<PROXMOX_IP>:8080
 }
 ```
 
