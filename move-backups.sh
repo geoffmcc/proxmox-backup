@@ -2,6 +2,13 @@
 
 set -euo pipefail
 
+DRY_RUN=false
+for arg in "$@"; do
+    if [ "$arg" = "--dry-run" ]; then
+        DRY_RUN=true
+    fi
+done
+
 SESSION_NAME="backup-transfer"
 if [ -z "${TMUX:-}" ]; then
     if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
@@ -15,11 +22,50 @@ if [ -z "${TMUX:-}" ]; then
     exit 0
 fi
 
-SRC_DIR="/var/lib/vz/dump"
-DST_DIR="/mnt/WD-Gold/proxmox-backups"
-LOG_FILE="/var/log/backup-transfer-$(date +%Y%m%d-%H%M%S).log"
-WEB_DIR="/var/www/backup-status"
-WEB_PORT=8080
+if [ "$DRY_RUN" = true ]; then
+    SRC_DIR="/tmp/backup-test-src"
+    DST_DIR="/tmp/backup-test-dst"
+    LOG_FILE="/tmp/backup-transfer-test.log"
+    WEB_DIR="/tmp/backup-test-web"
+    WEB_PORT=8080
+
+    rm -rf "$SRC_DIR" "$DST_DIR" "$WEB_DIR"
+    mkdir -p "$SRC_DIR" "$DST_DIR" "$WEB_DIR"
+
+    echo "Creating 10 fake backup files..."
+    create_fake_file() {
+        local name="$1"
+        local has_log="${2:-true}"
+        local has_notes="${3:-false}"
+        dd if=/dev/urandom of="$SRC_DIR/$name" bs=1M count=1 2>/dev/null
+        local base="${name%.*}"
+        if [ "$has_log" = true ]; then
+            echo "Fake log for $name" > "$SRC_DIR/${base}.log"
+        fi
+        if [ "$has_notes" = true ]; then
+            echo "Fake notes for $name" > "$SRC_DIR/${base}.notes"
+        fi
+    }
+
+    create_fake_file "vzdump-lxc-100-2026_06_07-01_01_02.tar.zst" true false
+    create_fake_file "vzdump-lxc-100-2026_06_08-03_34_57.tar.zst" true true
+    create_fake_file "vzdump-lxc-101-2026_06_08-03_35_58.tar.zst" true false
+    create_fake_file "vzdump-lxc-102-2026_06_07-01_01_02.tar.zst" false false
+    create_fake_file "vzdump-lxc-102-2026_06_08-03_36_09.tar.zst" true false
+    create_fake_file "vzdump-lxc-103-2026_06_07-01_01_08.tar.zst" false false
+    create_fake_file "vzdump-qemu-200-2026_06_09-02_00_00.vma.zst" true false
+    create_fake_file "vzdump-qemu-201-2026_06_09-02_15_00.vma.zst" true true
+    create_fake_file "vzdump-lxc-104-2026_06_09-04_00_00.tar.zst" true false
+    create_fake_file "vzdump-lxc-100-2026_06_09-05_00_00.tar.zst" false false
+    echo "Created $(ls -1 "$SRC_DIR"/*.tar.zst "$SRC_DIR"/*.vma.zst 2>/dev/null | wc -l) backup files"
+else
+    SRC_DIR="/var/lib/vz/dump"
+    DST_DIR="/mnt/WD-Gold/proxmox-backups"
+    LOG_FILE="/var/log/backup-transfer-$(date +%Y%m%d-%H%M%S).log"
+    WEB_DIR="/var/www/backup-status"
+    WEB_PORT=8080
+fi
+
 STATUS_FILE="$WEB_DIR/status.json"
 START_TIME=$(date +%s)
 SERVER_PID=""
@@ -34,6 +80,19 @@ cleanup() {
     if [ -n "$SERVER_PID" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
         kill "$SERVER_PID" 2>/dev/null || true
         log "Stopped web server (PID $SERVER_PID)"
+    fi
+    if [ "$DRY_RUN" = true ]; then
+        log "Dry-run complete. Failed: $failed"
+        if [ "$failed" -eq 0 ]; then
+            log "All checksums passed. Cleaning up temp dirs..."
+            rm -rf "$SRC_DIR" "$DST_DIR" "$WEB_DIR"
+            log "Cleaned up: $SRC_DIR, $DST_DIR, $WEB_DIR"
+        else
+            log "Some transfers failed. Leaving temp dirs for inspection:"
+            log "  Source: $SRC_DIR"
+            log "  Destination: $DST_DIR"
+            log "  Web: $WEB_DIR"
+        fi
     fi
 }
 trap cleanup EXIT
@@ -60,7 +119,12 @@ EOF
 
 mkdir -p "$DST_DIR"
 mkdir -p "$WEB_DIR"
-cp ~/move-backups/index.html "$WEB_DIR/index.html" 2>/dev/null || true
+
+if [ "$DRY_RUN" = true ]; then
+    cp ~/move-backups/index.html "$WEB_DIR/index.html" 2>/dev/null || true
+else
+    cp ~/move-backups/index.html "$WEB_DIR/index.html" 2>/dev/null || true
+fi
 
 cd "$WEB_DIR"
 python3 -m http.server "$WEB_PORT" &>/dev/null &
@@ -68,6 +132,9 @@ SERVER_PID=$!
 cd - > /dev/null
 log "Started web dashboard on port $WEB_PORT (PID $SERVER_PID)"
 
+if [ "$DRY_RUN" = true ]; then
+    log "=== DRY RUN MODE ==="
+fi
 log "Starting backup transfer from $SRC_DIR to $DST_DIR"
 
 transferred=0
@@ -158,5 +225,11 @@ done
 
 write_status "false" "$total_files" "" "$files_json"
 log "Done. Transferred: $transferred, Skipped: $skipped, Failed: $failed"
-log "Dashboard will remain available for 60 seconds..."
-sleep 60
+
+if [ "$DRY_RUN" = true ]; then
+    log "Dry-run dashboard will remain available for 30 seconds..."
+    sleep 30
+else
+    log "Dashboard will remain available for 60 seconds..."
+    sleep 60
+fi
