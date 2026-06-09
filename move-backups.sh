@@ -38,7 +38,14 @@ for ext in tar.zst vma.zst; do
         [ -f "$src_file" ] || continue
 
         filename=$(basename "$src_file")
-        dst_file="$DST_DIR/$filename"
+        backup_date=$(echo "$filename" | grep -oP '\d{4}_\d{2}_\d{2}' | head -1 | tr '_' '-')
+        if [ -n "$backup_date" ]; then
+            date_dir="$DST_DIR/$backup_date"
+            mkdir -p "$date_dir"
+            dst_file="$date_dir/$filename"
+        else
+            dst_file="$DST_DIR/$filename"
+        fi
 
         src_hash=$(sha256sum "$src_file" | awk '{print $1}')
         log "Processing: $filename (SHA-256: ${src_hash:0:16}...)"
@@ -65,7 +72,7 @@ for ext in tar.zst vma.zst; do
                 for sidecar in "${src_file%.${ext}}"*".log" "${src_file%.${ext}}"*".notes"; do
                     if [ -f "$sidecar" ]; then
                         sidecar_name=$(basename "$sidecar")
-                        cp "$sidecar" "$DST_DIR/$sidecar_name"
+                        cp "$sidecar" "$date_dir/$sidecar_name"
                         rm "$sidecar"
                         log "  Moved sidecar: $sidecar_name"
                     fi
